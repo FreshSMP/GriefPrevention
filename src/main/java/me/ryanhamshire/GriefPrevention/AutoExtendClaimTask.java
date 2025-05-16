@@ -1,6 +1,5 @@
 package me.ryanhamshire.GriefPrevention;
 
-import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.ChunkSnapshot;
 import org.bukkit.Location;
@@ -49,20 +48,16 @@ public class AutoExtendClaimTask implements Runnable
                 {
                     Chunk chunk = world.getChunkAt(chunkX, chunkZ);
 
-                    // If we're on the main thread, access to tile entities will speed up the process.
-                    if (Bukkit.isPrimaryThread())
-                    {
-                        // Find the lowest non-natural storage block in the chunk.
-                        // This way chests, barrels, etc. are always protected even if player block definitions are lacking.
-                        lowestLootableTile = Math.min(lowestLootableTile, Arrays.stream(chunk.getTileEntities())
-                                // Accept only Lootable tiles that do not have loot tables.
-                                // Naturally generated Lootables only have a loot table reference until the container is
-                                // accessed. On access the loot table is used to calculate the contents and removed.
-                                // This prevents claims from always extending over unexplored structures, spawners, etc.
-                                .filter(tile -> tile instanceof Lootable lootable && lootable.getLootTable() == null)
-                                // Return smallest value or default to existing min Y if no eligible tiles are present.
-                                .mapToInt(BlockState::getY).min().orElse(lowestLootableTile));
-                    }
+                    // Find the lowest non-natural storage block in the chunk.
+                    // This way chests, barrels, etc. are always protected even if player block definitions are lacking.
+                    lowestLootableTile = Math.min(lowestLootableTile, Arrays.stream(chunk.getTileEntities())
+                            // Accept only Lootable tiles that do not have loot tables.
+                            // Naturally generated Lootables only have a loot table reference until the container is
+                            // accessed. On access the loot table is used to calculate the contents and removed.
+                            // This prevents claims from always extending over unexplored structures, spawners, etc.
+                            .filter(tile -> tile instanceof Lootable lootable && lootable.getLootTable() == null)
+                            // Return smallest value or default to existing min Y if no eligible tiles are present.
+                            .mapToInt(BlockState::getY).min().orElse(lowestLootableTile));
 
                     // Save a snapshot of the chunk for more detailed async block searching.
                     snapshots.add(chunk.getChunkSnapshot(false, true, false));
@@ -70,9 +65,10 @@ public class AutoExtendClaimTask implements Runnable
             }
         }
 
-        Bukkit.getScheduler().runTaskAsynchronously(
-                GriefPrevention.instance,
-                new AutoExtendClaimTask(claim, snapshots, world.getEnvironment(), lowestLootableTile));
+        final Location location = claim.getLesserBoundaryCorner();
+        final int finalLowestLootableTile = lowestLootableTile;
+        GriefPrevention.scheduler.getScheduler().runAtLocation(location, task ->
+                new AutoExtendClaimTask(claim, snapshots, world.getEnvironment(), finalLowestLootableTile).run());
     }
 
     private final Claim claim;
@@ -107,9 +103,10 @@ public class AutoExtendClaimTask implements Runnable
     public void run()
     {
         int newY = this.getLowestBuiltY();
-        if (newY < this.claim.getLesserBoundaryCorner().getBlockY())
+        Location location = this.claim.getLesserBoundaryCorner();
+        if (newY < location.getBlockY())
         {
-            Bukkit.getScheduler().runTask(GriefPrevention.instance, new ExecuteExtendClaimTask(claim, newY));
+            GriefPrevention.scheduler.getScheduler().runAtLocation(location, task -> new ExecuteExtendClaimTask(claim, newY).run());
         }
     }
 

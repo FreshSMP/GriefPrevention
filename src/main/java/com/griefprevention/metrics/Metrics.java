@@ -1,9 +1,6 @@
 package com.griefprevention.metrics;
 
-/**
- * Created on 3/2/2024.
- */
-
+import me.ryanhamshire.GriefPrevention.GriefPrevention;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -28,8 +25,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -85,25 +80,20 @@ public class Metrics {
         boolean logSentData = config.getBoolean("logSentData", false);
         boolean logResponseStatusText = config.getBoolean("logResponseStatusText", false);
         metricsBase =
-                new MetricsBase(
-                        "bukkit",
-                        serverUUID,
-                        serviceId,
-                        enabled,
-                        this::appendPlatformData,
-                        this::appendServiceData,
-                        submitDataTask -> Bukkit.getScheduler().runTask(plugin, submitDataTask),
-                        plugin::isEnabled,
-                        (message, error) -> this.plugin.getLogger().log(Level.WARNING, message, error),
-                        (message) -> this.plugin.getLogger().log(Level.INFO, message),
-                        logErrors,
-                        logSentData,
-                        logResponseStatusText);
-    }
-
-    /** Shuts down the underlying scheduler service. */
-    public void shutdown() {
-        metricsBase.shutdown();
+            new MetricsBase(
+                "bukkit",
+                serverUUID,
+                serviceId,
+                enabled,
+                this::appendPlatformData,
+                this::appendServiceData,
+                submitDataTask -> GriefPrevention.scheduler.getScheduler().runNextTick(task -> submitDataTask.run()),
+                plugin::isEnabled,
+                (message, error) -> this.plugin.getLogger().log(Level.WARNING, message, error),
+                (message) -> this.plugin.getLogger().log(Level.INFO, message),
+                logErrors,
+                logSentData,
+                logResponseStatusText);
     }
 
     /**
@@ -152,8 +142,6 @@ public class Metrics {
         public static final String METRICS_VERSION = "3.0.2";
 
         private static final String REPORT_URL = "https://bStats.org/api/v2/data/%s";
-
-        private final ScheduledExecutorService scheduler;
 
         private final String platform;
 
@@ -218,14 +206,10 @@ public class Metrics {
                 boolean logErrors,
                 boolean logSentData,
                 boolean logResponseStatusText) {
-            ScheduledThreadPoolExecutor scheduler =
-                    new ScheduledThreadPoolExecutor(1, task -> new Thread(task, "bStats-Metrics"));
             // We want delayed tasks (non-periodic) that will execute in the future to be
             // cancelled when the scheduler is shutdown.
             // Otherwise, we risk preventing the server from shutting down even when
             // MetricsBase#shutdown() is called
-            scheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
-            this.scheduler = scheduler;
             this.platform = platform;
             this.serverUuid = serverUuid;
             this.serviceId = serviceId;
@@ -251,16 +235,11 @@ public class Metrics {
             this.customCharts.add(chart);
         }
 
-        public void shutdown() {
-            scheduler.shutdown();
-        }
-
         private void startSubmitting() {
             final Runnable submitTask =
                     () -> {
                         if (!enabled || !checkServiceEnabledSupplier.get()) {
                             // Submitting data or service is disabled
-                            scheduler.shutdown();
                             return;
                         }
                         if (submitTaskConsumer != null) {
@@ -279,9 +258,8 @@ public class Metrics {
             // don't do it!
             long initialDelay = (long) (1000 * 60 * (3 + Math.random() * 3));
             long secondDelay = (long) (1000 * 60 * (Math.random() * 30));
-            scheduler.schedule(submitTask, initialDelay, TimeUnit.MILLISECONDS);
-            scheduler.scheduleAtFixedRate(
-                    submitTask, initialDelay + secondDelay, 1000 * 60 * 30, TimeUnit.MILLISECONDS);
+            GriefPrevention.scheduler.getScheduler().runLater(submitTask, initialDelay, TimeUnit.MILLISECONDS);
+            GriefPrevention.scheduler.getScheduler().runTimerAsync(submitTask, initialDelay + secondDelay, 1000 * 60 * 30, TimeUnit.MILLISECONDS);
         }
 
         private void submitData() {
@@ -300,18 +278,15 @@ public class Metrics {
             baseJsonBuilder.appendField("serverUUID", serverUuid);
             baseJsonBuilder.appendField("metricsVersion", METRICS_VERSION);
             JsonObjectBuilder.JsonObject data = baseJsonBuilder.build();
-            scheduler.execute(
-                    () -> {
-                        try {
-                            // Send the data
-                            sendData(data);
-                        } catch (Exception e) {
-                            // Something went wrong! :(
-                            if (logErrors) {
-                                errorLogger.accept("Could not submit bStats metrics data", e);
-                            }
-                        }
-                    });
+            GriefPrevention.scheduler.getScheduler().runAsync((task) -> {
+                try {
+                    sendData(data);
+                } catch (Exception e) {
+                    if (logErrors) {
+                        errorLogger.accept("Could not submit bStats metrics data", e);
+                    }
+                }
+            });
         }
 
         private void sendData(JsonObjectBuilder.JsonObject data) throws Exception {

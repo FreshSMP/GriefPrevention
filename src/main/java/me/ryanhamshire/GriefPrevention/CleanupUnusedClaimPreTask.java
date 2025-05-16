@@ -22,13 +22,14 @@ import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 //asynchronously loads player data without caching it in the datastore, then
 //passes those data to a claim cleanup task which might decide to delete a claim for inactivity
 
 class CleanupUnusedClaimPreTask implements Runnable
 {
-    private UUID ownerID = null;
+    private final UUID ownerID;
 
     CleanupUnusedClaimPreTask(UUID uuid)
     {
@@ -42,7 +43,7 @@ class CleanupUnusedClaimPreTask implements Runnable
         PlayerData ownerData = GriefPrevention.instance.dataStore.getPlayerDataFromStorage(ownerID);
         OfflinePlayer ownerInfo = Bukkit.getServer().getOfflinePlayer(ownerID);
 
-        GriefPrevention.AddLogEntry("Looking for expired claims.  Checking data for " + ownerID.toString(), CustomLogEntryTypes.Debug, true);
+        GriefPrevention.AddLogEntry("Looking for expired claims.  Checking data for " + ownerID, CustomLogEntryTypes.Debug, true);
 
         //expiration code uses last logout timestamp to decide whether to expire claims
         //don't expire claims for online players
@@ -78,11 +79,11 @@ class CleanupUnusedClaimPreTask implements Runnable
 
         if (claimToExpire == null)
         {
-            GriefPrevention.AddLogEntry("Unable to find a claim to expire for " + ownerID.toString(), CustomLogEntryTypes.Debug, false);
+            GriefPrevention.AddLogEntry("Unable to find a claim to expire for " + ownerID, CustomLogEntryTypes.Debug, false);
             return;
         }
 
         //pass it back to the main server thread, where it's safe to delete a claim if needed
-        Bukkit.getScheduler().scheduleSyncDelayedTask(GriefPrevention.instance, new CleanupUnusedClaimTask(claimToExpire, ownerData, ownerInfo), 1L);
+        GriefPrevention.scheduler.getScheduler().runLater(new CleanupUnusedClaimTask(claimToExpire, ownerData, ownerInfo), 50L, TimeUnit.MILLISECONDS);
     }
 }
