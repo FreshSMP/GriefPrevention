@@ -87,7 +87,7 @@ public class Metrics {
                 enabled,
                 this::appendPlatformData,
                 this::appendServiceData,
-                submitDataTask -> GriefPrevention.scheduler.getScheduler().runNextTick(task -> submitDataTask.run()),
+                submitDataTask -> GriefPrevention.scheduler.getScheduler().runLater(task -> submitDataTask.run(), 50, TimeUnit.MILLISECONDS),
                 plugin::isEnabled,
                 (message, error) -> this.plugin.getLogger().log(Level.WARNING, message, error),
                 (message) -> this.plugin.getLogger().log(Level.INFO, message),
