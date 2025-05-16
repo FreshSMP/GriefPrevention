@@ -844,7 +844,7 @@ public class Claim
 
             int nextX = currentX;
             int nextZ = currentZ;
-            if(currentX < largeX)
+            if (currentX < largeX)
             {
                 nextX++;
             }
