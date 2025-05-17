@@ -68,7 +68,7 @@ public class AutoExtendClaimTask implements Runnable
         final Location location = claim.getLesserBoundaryCorner();
         final int finalLowestLootableTile = lowestLootableTile;
         GriefPrevention.scheduler.getScheduler().runAtLocation(location, task ->
-                new AutoExtendClaimTask(claim, snapshots, world.getEnvironment(), finalLowestLootableTile).run());
+                new AutoExtendClaimTask(claim, snapshots, world.getEnvironment(), finalLowestLootableTile));
     }
 
     private final Claim claim;
@@ -106,7 +106,7 @@ public class AutoExtendClaimTask implements Runnable
         Location location = this.claim.getLesserBoundaryCorner();
         if (newY < location.getBlockY())
         {
-            GriefPrevention.scheduler.getScheduler().runAtLocation(location, task -> new ExecuteExtendClaimTask(claim, newY).run());
+            GriefPrevention.scheduler.getScheduler().runAtLocation(location, task -> new ExecuteExtendClaimTask(claim, newY));
         }
     }
 
@@ -417,5 +417,4 @@ public class AutoExtendClaimTask implements Runnable
             GriefPrevention.instance.dataStore.extendClaim(claim, newY);
         }
     }
-
 }
